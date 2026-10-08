@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>읽기 카운터</title>
+<meta name="description" content="문장을 세 번 읽어 본보기 소리를 만들고, 그와 모양이 같은 소리가 들릴 때마다 횟수를 센다. 인터넷 없이 폰 안에서만 돈다.">
+<style>
+:root{
+  --bg:#f6f4ee; --fg:#1c1b18; --mute:#6f6a60; --card:#fff; --line:#e3dfd5;
+  --accent:#b4531e; --ok:#2e7d4f; --warn:#b26a00; --btn:#1c1b18; --btnfg:#fff;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15140f; --fg:#efeae0; --mute:#9c968a; --card:#1f1d17; --line:#33302a;
+    --accent:#f08a4b; --ok:#5fbf8a; --warn:#e6a23c; --btn:#efeae0; --btnfg:#15140f;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15140f; --fg:#efeae0; --mute:#9c968a; --card:#1f1d17; --line:#33302a;
+  --accent:#f08a4b; --ok:#5fbf8a; --warn:#e6a23c; --btn:#efeae0; --btnfg:#15140f;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;-webkit-tap-highlight-color:transparent}
+body{padding:16px;padding-bottom:40px;max-width:560px;margin:0 auto}
+h1{font-size:18px;margin:4px 0 12px;font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:12px}
+label{display:block;font-size:13px;color:var(--mute);margin:8px 0 4px}
+input[type=text],input[type=number]{width:100%;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg)}
+input[type=range]{width:100%}
+.hint{font-size:12px;color:var(--mute);margin-top:6px;line-height:1.5}
+.big{font-size:96px;font-weight:700;line-height:1;text-align:center;letter-spacing:-2px;font-variant-numeric:tabular-nums;margin:8px 0 4px}
+.big small{font-size:28px;color:var(--mute);font-weight:500;letter-spacing:0}
+.sub{text-align:center;color:var(--mute);font-size:14px;min-height:20px}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:12px 0}
+.bar>div{height:100%;background:var(--accent);width:0%;transition:width .3s}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row>*{flex:1}
+button{font-size:16px;padding:14px 12px;border:0;border-radius:12px;background:var(--btn);color:var(--btnfg);font-weight:600;cursor:pointer}
+button.ghost{background:transparent;color:var(--fg);border:1px solid var(--line);font-weight:500}
+button.accent{background:var(--accent);color:#fff}
+button:disabled{opacity:.4}
+button.sm{font-size:14px;padding:10px 8px}
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;margin-top:10px}
+.stats div{font-size:12px;color:var(--mute)}
+.stats b{display:block;font-size:18px;color:var(--fg);font-variant-numeric:tabular-nums}
+.status{font-size:13px;margin-top:8px;color:var(--mute);min-height:18px}
+.status.on{color:var(--ok)} .status.warn{color:var(--warn)}
+.meter{height:6px;background:var(--line);border-radius:3px;margin-top:8px;position:relative;overflow:hidden}
+.meter>div{position:absolute;left:0;top:0;height:100%;background:var(--ok);width:0}
+.meter>i{position:absolute;top:-2px;width:2px;height:10px;background:var(--warn)}
+.tpl{display:flex;gap:6px;align-items:center;font-size:14px;padding:6px 0;border-top:1px solid var(--line)}
+.tpl:first-child{border-top:0}
+.tpl span{flex:1}
+.tpl button{padding:6px 10px;font-size:13px}
+.flag{border-top:1px solid var(--line);padding:10px 0}
+.flag:first-child{border-top:0}
+.flag .t{font-size:13px;color:var(--mute);margin-bottom:6px}
+.flag .row button{padding:10px 6px;font-size:14px}
+.flag.done{opacity:.5}
+.done-banner{background:var(--ok);color:#fff;border-radius:14px;padding:18px;text-align:center;font-size:22px;font-weight:700;margin-bottom:12px;display:none}
+details summary{cursor:pointer;color:var(--mute);font-size:14px}
+</style>
+</head>
+<body>
+<h1>읽기 카운터</h1>
+<div class="done-banner" id="doneBanner">목표 달성</div>
+
+<div class="card" id="setup">
+  <label>읽을 문장 (표시용)</label>
+  <input type="text" id="sentence" placeholder="예) 나는 ○○을 이루었다.">
+  <label>목표 횟수</label>
+  <input type="number" id="target" value="1000" min="1">
+
+  <label style="margin-top:14px">본보기 소리 — 평소 읽는 속도로 문장을 한 번씩, 세 번</label>
+  <div id="tplList"></div>
+  <div class="row" style="margin-top:8px">
+    <button class="ghost" id="tplBtn">본보기 녹음</button>
+    <button class="ghost sm" id="tplClear">본보기 지우기</button>
+  </div>
+  <div class="hint">버튼을 누르고 반 박자 쉰 뒤 문장을 읽으세요. 말이 끝나고 조용해지면 저절로 저장됩니다. 본보기가 둘 이상이면 서로 얼마나 닮았는지로 기준 거리를 정합니다.</div>
+
+  <label style="margin-top:14px">감도 <span id="multView"></span></label>
+  <input type="range" id="mult" min="1.1" max="2.6" step="0.1" value="1.5">
+  <div class="hint">처음엔 10번만 읽고 숫자를 맞춰 보세요. 적게 세면 오른쪽(너그럽게), 많이 세면 왼쪽(엄격하게)으로. 읽는 중에도 바꿀 수 있습니다.</div>
+</div>
+
+<div class="card">
+  <div class="big"><span id="count">0</span><small> / <span id="targetView">1000</span></small></div>
+  <div class="sub" id="adjustLine"></div>
+  <div class="bar"><div id="barFill"></div></div>
+  <div class="row">
+    <button class="accent" id="startBtn">시작</button>
+    <button class="ghost" id="plusBtn">+1</button>
+    <button class="ghost" id="minusBtn">−1</button>
+  </div>
+  <div class="stats">
+    <div>경과<b id="elapsed">0:00</b></div>
+    <div>분당<b id="rate">–</b></div>
+    <div>남은 시간<b id="eta">–</b></div>
+  </div>
+  <div class="status" id="status">대기 중</div>
+  <div class="meter" title="마지막 매칭 거리 (막대가 표시선 안쪽이면 셈)"><div id="meterFill"></div><i id="meterThr" style="left:70%"></i></div>
+  <div class="hint" id="matchInfo">마지막 매칭 거리가 여기 나옵니다. 표시선 안쪽이면 센 것입니다.</div>
+</div>
+
+<div class="card" id="reviewCard" style="display:none">
+  <div style="font-weight:600;margin-bottom:4px">확인할 구간 <span id="flagCount">0</span>곳</div>
+  <div class="hint" style="margin-bottom:8px">말소리는 있는데 세지 않은 자리와, 기준에 아슬아슬하게 걸린 자리입니다. 재생해서 그 안에서 문장을 몇 번 읽었는지 누르면 그만큼 보정됩니다.</div>
+  <div id="flags"></div>
+</div>
+
+<div class="card">
+  <div class="row">
+    <button class="ghost sm" id="finishBtn">끝내고 확인</button>
+    <button class="ghost sm" id="wavBtn" disabled>녹음 저장</button>
+    <button class="ghost sm" id="resetBtn">초기화</button>
+  </div>
+  <details style="margin-top:10px"><summary>기록</summary><div id="log" class="hint" style="max-height:200px;overflow:auto;white-space:pre-wrap"></div></details>
+</div>
+
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const LS = 'readCounter.v2', LS_TPL = 'readCounter.tpl.v2';
+const qs = new URLSearchParams(location.search);
+const FR = 16000, N = 400, NFFT = 512, HOP = 160, NMEL = 26, NCEP = 12;
+
+// ---------- 상태 ----------
+let S = { sentence: '', target: 1000, mult: 1.5, count: 0, adjust: 0, elapsed: 0, lastHundred: 0, notified: false, startedAt: null };
+try { Object.assign(S, JSON.parse(localStorage.getItem(LS) || '{}')); } catch (e) {}
+if (qs.get('s')) S.sentence = qs.get('s');
+if (qs.get('t')) S.target = +qs.get('t') || S.target;
+S.startedAt = null;
+const save = () => { try { localStorage.setItem(LS, JSON.stringify(S)); } catch (e) {} };
+
+let templates = [];   // {mf: Float32Array(n*12), n, dur, db}
+try { templates = (JSON.parse(localStorage.getItem(LS_TPL) || '[]')).map(t => ({ mf: Float32Array.from(t.mf), n: t.n, dur: t.dur, db: t.db })); } catch (e) { templates = []; }
+const saveTpl = () => { try { localStorage.setItem(LS_TPL, JSON.stringify(templates.map(t => ({ mf: Array.from(t.mf), n: t.n, dur: t.dur, db: t.db })))); } catch (e) {} };
+
+let norm = null;      // {mean: Float32Array(12), std: Float32Array(12), base, tdur, speechDb}
+let springs = [];
+let mode = 'idle';    // idle | template | session
+let running = false;
+let audio = null;     // {ctx, stream, node, rs, blocks:[Int16Array(1600)], pend:Float32Array, pendLen, total}
+let feat = null;      // 프레임 추출 상태
+let floorDb = -60, voicedThr = -48, floorFrames = [];
+let tplRec = null;    // 본보기 녹음 상태
+let matches = [], flags = [], lastMatch = null, utt = null, vIdx = 0;
+let wakeLock = null, timer = null, player = null, actx = null;
+
+// ---------- 화면 ----------
+$('sentence').value = S.sentence; $('target').value = S.target; $('mult').value = S.mult;
+$('sentence').oninput = e => { S.sentence = e.target.value; save(); };
+$('target').oninput = e => { S.target = Math.max(1, +e.target.value || 1); save(); render(); };
+$('mult').oninput = e => { S.mult = +e.target.value; save(); renderTpl(); };
+
+function fmt(ms) { const s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function total() { return S.count + S.adjust; }
+function elapsedNow() { return S.elapsed + (S.startedAt ? Date.now() - S.startedAt : 0); }
+function thr() { return norm && norm.base ? norm.base * S.mult : Infinity; }
+function render() {
+  const t = total();
+  $('count').textContent = t; $('targetView').textContent = S.target;
+  $('adjustLine').textContent = S.adjust ? `자동 ${S.count} + 보정 ${S.adjust > 0 ? '+' : ''}${S.adjust}` : '';
+  $('barFill').style.width = Math.min(100, t / S.target * 100) + '%';
+  const el = elapsedNow(); $('elapsed').textContent = fmt(el);
+  if (el > 20000 && t > 0) {
+    const perMin = t / (el / 60000); $('rate').textContent = perMin.toFixed(1);
+    const left = S.target - t; $('eta').textContent = left > 0 ? fmt(left / perMin * 60000) : '완료';
+  } else { $('rate').textContent = '–'; $('eta').textContent = '–'; }
+  $('doneBanner').style.display = t >= S.target ? 'block' : 'none';
+  $('wavBtn').disabled = !(audio && audio.blocks.length);
+}
+function renderTpl() {
+  const list = $('tplList'); list.innerHTML = '';
+  templates.forEach((t, i) => {
+    const d = document.createElement('div'); d.className = 'tpl';
+    d.innerHTML = `<span>${i + 1}. ${t.dur.toFixed(1)}초</span><button class="ghost" data-i="${i}">삭제</button>`;
+    d.querySelector('button').onclick = () => { templates.splice(i, 1); saveTpl(); rebuild(); renderTpl(); };
+    list.appendChild(d);
+  });
+  if (!templates.length) list.innerHTML = '<div class="hint">아직 없음</div>';
+  $('multView').textContent = norm && norm.base ? `${S.mult.toFixed(1)}  (본보기끼리 거리 ${norm.base.toFixed(2)} → 기준 ${thr().toFixed(2)})` : `${S.mult.toFixed(1)}`;
+  $('tplBtn').disabled = mode === 'template' || running;
+  $('startBtn').disabled = !(templates.length >= 2) && !running;
+}
+function setStatus(txt, cls) { $('status').textContent = txt; $('status').className = 'status ' + (cls || ''); }
+function log(line) { const el = $('log'); el.textContent = (new Date().toLocaleTimeString('ko-KR', { hour12: false }) + '  ' + line + '\n' + el.textContent).slice(0, 30000); }
+
+// ---------- 신호 처리: FFT · 멜 · MFCC ----------
+function makeFFT(n) {
+  const bits = Math.log2(n), rev = new Uint32Array(n);
+  for (let i = 0; i < n; i++) { let r = 0, x = i; for (let b = 0; b < bits; b++) { r = (r << 1) | (x & 1); x >>= 1; } rev[i] = r; }
+  const cs = new Float64Array(n / 2), sn = new Float64Array(n / 2);
+  for (let i = 0; i < n / 2; i++) { cs[i] = Math.cos(-2 * Math.PI * i / n); sn[i] = Math.sin(-2 * Math.PI * i / n); }
+  return (re, im) => {
+    for (let i = 0; i < n; i++) { const j = rev[i]; if (j > i) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+    for (let size = 2; size <= n; size <<= 1) {
+      const half = size >> 1, step = n / size;
+      for (let i = 0; i < n; i += size) for (let j = 0; j < half; j++) {
+        const k = j * step, a = i + j, b = a + half;
+        const tr = re[b] * cs[k] - im[b] * sn[k], ti = re[b] * sn[k] + im[b] * cs[k];
+        re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+      }
+    }
+  };
+}
+const fft = makeFFT(NFFT);
+const hamm = Float64Array.from({ length: N }, (_, i) => 0.54 - 0.46 * Math.cos(2 * Math.PI * i / (N - 1)));
+const mel = f => 2595 * Math.log10(1 + f / 700), imel = m => 700 * (10 ** (m / 2595) - 1);
+const melBins = (() => { const lo = mel(0), hi = mel(FR / 2), pts = []; for (let i = 0; i < NMEL + 2; i++) pts.push(Math.floor((NFFT + 1) * imel(lo + (hi - lo) * i / (NMEL + 1)) / FR)); return pts; })();
+const dct = (() => { const m = new Float64Array((NCEP + 1) * NMEL); for (let k = 0; k <= NCEP; k++) for (let j = 0; j < NMEL; j++) m[k * NMEL + j] = Math.cos(Math.PI * k * (j + 0.5) / NMEL); return m; })();
+const re = new Float64Array(NFFT), im = new Float64Array(NFFT), pw = new Float64Array(NFFT / 2 + 1), melE = new Float64Array(NMEL);
+function mfccFrame(x, off) { // x: Float32Array, off: 시작 인덱스 → {mf: Float32Array(12), db}
+  let e = 0, prev = x[off];
+  for (let i = 0; i < N; i++) { const s = x[off + i]; const y = s - 0.97 * prev; prev = s; re[i] = y * hamm[i]; im[i] = 0; e += s * s; }
+  for (let i = N; i < NFFT; i++) { re[i] = 0; im[i] = 0; }
+  fft(re, im);
+  for (let i = 0; i <= NFFT / 2; i++) pw[i] = re[i] * re[i] + im[i] * im[i];
+  for (let m = 1; m <= NMEL; m++) {
+    const a = melBins[m - 1], b = melBins[m], c = melBins[m + 1]; let s = 0;
+    for (let k = a; k < b; k++) s += pw[k] * (k - a) / Math.max(1, b - a);
+    for (let k = b; k <= c; k++) s += pw[k] * (c - k) / Math.max(1, c - b);
+    melE[m - 1] = Math.log(s + 1e-10);
+  }
+  const mf = new Float32Array(NCEP);
+  for (let k = 1; k <= NCEP; k++) { let s = 0; for (let j = 0; j < NMEL; j++) s += melE[j] * dct[k * NMEL + j]; mf[k - 1] = s; }
+  return { mf, db: 10 * Math.log10(e / N + 1e-10) };
+}
+
+// 재샘플러 (어떤 기기 샘플레이트든 16 kHz로)
+class Resampler {
+  constructor(src) { this.ratio = src / FR; this.pos = 0; this.last = 0; }
+  process(inp) {
+    const out = []; let p = this.pos; const n = inp.length;
+    while (true) {
+      const i = Math.floor(p), f = p - i;
+      const a = i < 0 ? this.last : inp[i]; if (i + 1 >= n) break;
+      out.push(a + (inp[i + 1] - a) * f); p += this.ratio;
+    }
+    this.pos = p - n; this.last = inp[n - 1];
+    return Float32Array.from(out);
+  }
+}
+
+// ---------- 오디오 입력 ----------
+async function startAudio() {
+  if (audio) { if (audio.ctx.state === 'suspended') await audio.ctx.resume(); return; }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = ctx.createMediaStreamSource(stream);
+  const code = `class P extends AudioWorkletProcessor{process(i){const c=i[0]&&i[0][0];if(c)this.port.postMessage(Float32Array.from(c));return true;}}registerProcessor('p',P);`;
+  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([code], { type: 'application/javascript' })));
+  const node = new AudioWorkletNode(ctx, 'p');
+  audio = { ctx, stream, node, rs: new Resampler(ctx.sampleRate), blocks: [], pend: new Float32Array(1600), pendLen: 0, total: 0 };
+  feat = { buf: new Float32Array(FR * 2), len: 0, base: 0 }; // base: buf[0]의 전체 샘플 인덱스
+  node.port.onmessage = e => onSamples(audio.rs.process(e.data));
+  src.connect(node);
+  log(`마이크 켬 (기기 ${ctx.sampleRate} Hz → 16000 Hz)`);
+}
+function onSamples(x) {
+  // 1) 녹음 저장 (세션 중에만)
+  if (mode === 'session' && running) {
+    let i = 0;
+    while (i < x.length) {
+      const take = Math.min(1600 - audio.pendLen, x.length - i);
+      audio.pend.set(x.subarray(i, i + take), audio.pendLen); audio.pendLen += take; i += take;
+      if (audio.pendLen === 1600) { const b = new Int16Array(1600); for (let j = 0; j < 1600; j++) { const v = Math.max(-1, Math.min(1, audio.pend[j])); b[j] = v < 0 ? v * 32768 : v * 32767; } audio.blocks.push(b); audio.pendLen = 0; }
+    }
+  }
+  // 2) 프레임 추출
+  const f = feat;
+  if (f.len + x.length > f.buf.length) { const keep = f.buf.subarray(0, f.len); f.buf = new Float32Array(Math.max(f.buf.length * 2, f.len + x.length)); f.buf.set(keep); }
+  f.buf.set(x, f.len); f.len += x.length;
+  let p = 0;
+  while (p + N <= f.len) { const fr = mfccFrame(f.buf, p); onFrame(fr, (f.base + p + N / 2) / FR); p += HOP; }
+  f.buf.copyWithin(0, p, f.len); f.len -= p; f.base += p;
+}
+function recTime() { return audio ? audio.blocks.length * 0.1 + audio.pendLen / FR : 0; }
+function sliceAudio(from, to) {
+  const a = Math.max(0, Math.floor(from * FR)), b = Math.min(Math.floor(to * FR), audio.blocks.length * 1600);
+  const out = new Int16Array(Math.max(0, b - a));
+  for (let s = a; s < b;) { const bi = Math.floor(s / 1600), o = s - bi * 1600, n = Math.min(1600 - o, b - s); out.set(audio.blocks[bi].subarray(o, o + n), s - a); s += n; }
+  return out;
+}
+function play(from, to) {
+  if (!audio) return;
+  if (player) { try { player.stop(); } catch (e) {} }
+  const pcm = sliceAudio(from, to); if (!pcm.length) return;
+  actx = actx || new AudioContext();
+  const ab = actx.createBuffer(1, pcm.length, FR), ch = ab.getChannelData(0);
+  for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
+  const sn = actx.createBufferSource(); sn.buffer = ab; sn.connect(actx.destination); sn.start(); player = sn;
+}
+function wavBlob(pcm) {
+  const buf = new ArrayBuffer(44 + pcm.length * 2), v = new DataView(buf), str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + pcm.length * 2, true); str(8, 'WAVE'); str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, FR, true); v.setUint32(28, FR * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, pcm.length * 2, true);
+  new Int16Array(buf, 44).set(pcm); return new Blob([buf], { type: 'audio/wav' });
+}
+
+// ---------- 프레임 처리 ----------
+function onFrame(fr, time) {
+  // 바닥 소음: 마이크 켠 뒤 첫 0.3초 + 그 뒤로는 더 조용해질 때만 내려감
+  if (floorFrames.length < 30) { floorFrames.push(fr.db); if (floorFrames.length === 30) { floorDb = median(floorFrames); setVoicedThr(); log(`바닥 소음 ${floorDb.toFixed(0)} dB · 말소리 기준 ${voicedThr.toFixed(0)} dB`); } return; }
+  if (fr.db < floorDb - 3) { floorDb = fr.db; setVoicedThr(); }
+  const voiced = fr.db > voicedThr;
+
+  if (mode === 'template' && tplRec) {
+    if (!tplRec.active) { if (voiced) { tplRec.active = true; tplRec.start = time; tplRec.last = time; tplRec.frames = [fr]; setStatus('듣는 중…', 'on'); } }
+    else if (voiced) { tplRec.frames.push(fr); tplRec.last = time; }
+    else if (time - tplRec.last > 0.6 || time - tplRec.start > 8) finishTemplate();
+    return;
+  }
+  if (mode !== 'session' || !running) return;
+
+  // 발화 묶음 추적 (검토용)
+  if (voiced) {
+    if (!utt) utt = { start: time, last: time }; utt.last = time;
+    const x = normalize(fr.mf), idx = vIdx++;
+    for (let k = 0; k < springs.length; k++) { const m = springs[k].step(x, idx, time, thr()); if (m) onMatch(m, k); }
+  } else if (utt && time - utt.last > 0.45) { flushAll(); closeUtt(); }
+}
+function flushAll() { springs.forEach((sp, k) => { const m = sp.flush(); if (m) onMatch(m, k); }); }
+function setVoicedThr() { voicedThr = floorDb + 12; if (norm && norm.speechDb != null) voicedThr = Math.max(voicedThr, norm.speechDb - 22); }
+function median(a) { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; }
+function normalize(mf) { const o = new Float32Array(NCEP); for (let k = 0; k < NCEP; k++) o[k] = (mf[k] - norm.mean[k]) / norm.std[k]; return o; }
+
+// ---------- 본보기 ----------
+$('tplBtn').onclick = async () => {
+  try { await startAudio(); } catch (e) { setStatus('마이크를 못 켰습니다. 주소창 자물쇠에서 허용해 주세요', 'warn'); log('마이크 실패: ' + e.message); return; }
+  mode = 'template'; tplRec = { active: false }; setStatus('문장을 읽으세요', 'on'); renderTpl();
+};
+function finishTemplate() {
+  const r = tplRec; tplRec = null; mode = 'idle';
+  if (!r.frames || r.frames.length < 30) { setStatus('너무 짧아서 저장하지 않았습니다. 다시 눌러 주세요', 'warn'); renderTpl(); return; }
+  const n = r.frames.length, mf = new Float32Array(n * NCEP); let db = 0;
+  r.frames.forEach((f, i) => { mf.set(f.mf, i * NCEP); db += f.db; });
+  templates.push({ mf, n, dur: r.last - r.start, db: db / n }); saveTpl(); rebuild();
+  setStatus(`본보기 ${templates.length}개 저장 (${(r.last - r.start).toFixed(1)}초)`, 'on'); renderTpl();
+}
+$('tplClear').onclick = () => { templates = []; saveTpl(); rebuild(); renderTpl(); };
+
+function rebuild() {
+  norm = null; springs = [];
+  if (!templates.length) return;
+  const mean = new Float32Array(NCEP), std = new Float32Array(NCEP); let cnt = 0, speechDb = 0;
+  for (const t of templates) { for (let i = 0; i < t.n; i++) for (let k = 0; k < NCEP; k++) mean[k] += t.mf[i * NCEP + k]; cnt += t.n; speechDb += t.db; }
+  for (let k = 0; k < NCEP; k++) mean[k] /= cnt;
+  for (const t of templates) for (let i = 0; i < t.n; i++) for (let k = 0; k < NCEP; k++) { const v = t.mf[i * NCEP + k] - mean[k]; std[k] += v * v; }
+  for (let k = 0; k < NCEP; k++) std[k] = Math.max(1e-3, Math.sqrt(std[k] / cnt));
+  norm = { mean, std, base: null, tdur: median(templates.map(t => t.dur)), speechDb: speechDb / templates.length };
+  const normed = templates.map(t => { const o = new Float32Array(t.n * NCEP); for (let i = 0; i < t.n * NCEP; i++) o[i] = (t.mf[i] - mean[i % NCEP]) / std[i % NCEP]; return { frames: o, n: t.n }; });
+  springs = normed.map(t => new Spring(t));
+  if (normed.length >= 2) {
+    const ds = [];
+    for (let a = 0; a < normed.length; a++) for (let b = 0; b < normed.length; b++) if (a !== b) {
+      const sp = new Spring(normed[a]); let best = Infinity;
+      for (let i = 0; i < normed[b].n; i++) { sp.step(normed[b].frames.subarray(i * NCEP, (i + 1) * NCEP), i, i / 100, Infinity); best = Math.min(best, sp.endCost()); }
+      ds.push(best);
+    }
+    norm.base = ds.reduce((x, y) => x + y, 0) / ds.length;
+    log(`본보기끼리 거리 ${ds.map(d => d.toFixed(2)).join(' · ')} → 평균 ${norm.base.toFixed(2)}`);
+  }
+  setVoicedThr();
+}
+
+// ---------- 부분수열 DTW (SPRING) ----------
+class Spring {
+  constructor(t) {
+    this.y = t.frames; this.n = t.n; const n = t.n;
+    this.D = new Float64Array(n + 1).fill(Infinity); this.L = new Float64Array(n + 1); this.S = new Int32Array(n + 1); this.T = new Float64Array(n + 1);
+    this.D2 = new Float64Array(n + 1); this.L2 = new Float64Array(n + 1); this.S2 = new Int32Array(n + 1); this.T2 = new Float64Array(n + 1);
+    this.best = null; this.lastEnd = Infinity;
+  }
+  endCost() { return this.lastEnd; }
+  step(x, idx, time, thr) {
+    const { y, n } = this, pD = this.D, pL = this.L, pS = this.S, pT = this.T, D = this.D2, L = this.L2, S = this.S2, T = this.T2;
+    D[0] = 0; L[0] = 0; S[0] = idx; T[0] = time;
+    for (let i = 1; i <= n; i++) {
+      let d = 0; const o = (i - 1) * NCEP;
+      for (let k = 0; k < NCEP; k++) { const v = x[k] - y[o + k]; d += v * v; }
+      d = Math.sqrt(d);
+      let cD = pD[i], cL = pL[i], cS = pS[i], cT = pT[i];
+      if (D[i - 1] < cD) { cD = D[i - 1]; cL = L[i - 1]; cS = S[i - 1]; cT = T[i - 1]; }
+      if (pD[i - 1] < cD) { cD = pD[i - 1]; cL = pL[i - 1]; cS = pS[i - 1]; cT = pT[i - 1]; }
+      D[i] = cD + d; L[i] = cL + 1; S[i] = cS; T[i] = cT;
+    }
+    const end = D[n] / L[n]; this.lastEnd = end;
+    if (end <= thr && (!this.best || end < this.best.cost)) this.best = { cost: end, sIdx: S[n], sTime: T[n], eIdx: idx, eTime: time };
+    let out = null;
+    if (this.best && idx - this.best.eIdx >= 3) {
+      let fin = true;
+      for (let i = 1; i <= n; i++) if (S[i] <= this.best.eIdx && D[i] / L[i] < this.best.cost) { fin = false; break; }
+      if (fin) { out = this.best; this.best = null; for (let i = 1; i <= n; i++) if (S[i] <= out.eIdx) D[i] = Infinity; }
+    }
+    this.D = D; this.L = L; this.S = S; this.T = T; this.D2 = pD; this.L2 = pL; this.S2 = pS; this.T2 = pT;
+    return out;
+  }
+  flush() { // 쉼이 감지됐을 때: 지금까지의 최선을 확정하고 그 구간을 지운다
+    const b = this.best; this.best = null;
+    if (b) for (let i = 1; i <= this.n; i++) if (this.S[i] <= b.eIdx) this.D[i] = Infinity;
+    return b;
+  }
+}
+
+// ---------- 매칭 → 횟수 ----------
+function onMatch(m, k) {
+  const td = norm.tdur;
+  if (lastMatch && (m.eTime < lastMatch.eTime + 0.4 * td || m.sTime < lastMatch.eTime - 0.3 * td)) return; // 같은 읽기
+  lastMatch = m; matches.push(m); S.count++; bump();
+  const t = thr();
+  $('meterFill').style.width = Math.min(100, m.cost / (t * 1.4) * 100) + '%';
+  $('meterThr').style.left = (1 / 1.4 * 100) + '%';
+  $('matchInfo').textContent = `마지막 거리 ${m.cost.toFixed(2)} / 기준 ${t.toFixed(2)} · ${(m.eTime - m.sTime).toFixed(1)}초`;
+  if (m.cost > 0.97 * t) flags.push({ from: m.sTime, to: m.eTime, kind: '아슬아슬', opts: [['맞음', 0], ['아님 −1', -1]], decided: false });
+  render(); save();
+}
+// 검토 구간: 한 발화 묶음(0.45초 넘게 쉬지 않고 이어 읽은 덩어리) 안에서 읽기 끝 시각의 간격을 본다.
+// 한 번 빠지면 간격이 두 배, 잘못 더 세면 반이 된다. 기준은 지금까지의 중앙값.
+let intervals = [], spans = [], pendingZero = [];
+function med(a, fb) { if (a.length < 5) return fb; return median(a); }
+const miss = (from, to) => { if (to - from < 0.3) return; flags.push({ from, to, kind: '못 셈?', opts: [['0번', 0], ['1번', 1], ['2번', 2]], decided: false }); };
+// 매칭 없이 닫힌 묶음은 바로 플래그하지 않는다 — 문장 중간에 쉬어 반으로 갈렸을 수 있다.
+// 다음 매칭이 그 자리를 덮으면 지우고, 덮지 않은 채 남으면 그때 플래그한다.
+function settlePending(before) {
+  pendingZero = pendingZero.filter(u => {
+    if (u.end > before) return true;
+    if (!matches.some(m => m.sTime < u.end + 0.1 && m.eTime > u.start)) miss(u.start, u.end);
+    return false;
+  });
+}
+function closeUtt() {
+  const u = utt; utt = null; if (!norm) return;
+  const td = norm.tdur, end = u.last, ms = matches.filter(m => m.eTime >= u.start - 0.2 && m.eTime <= end + 0.3);
+  const dur = med(spans, td), gap = med(intervals, td * 1.15);
+  settlePending(u.start - 0.5);
+  if (!ms.length) { if (end - u.start >= 0.5 * dur) pendingZero.push({ start: u.start, end }); return; }
+  if (ms[0].eTime - u.start > 1.6 * dur) miss(u.start, ms[0].sTime + 0.1);
+  for (let i = 0; i + 1 < ms.length; i++) {
+    const iv = ms[i + 1].eTime - ms[i].eTime;
+    if (iv > 1.6 * gap) miss(ms[i].eTime - 0.1, ms[i + 1].sTime + 0.1);
+    else if (iv < 0.5 * gap) flags.push({ from: ms[i + 1].sTime - 0.1, to: ms[i + 1].eTime + 0.1, kind: '두 번으로 셈?', opts: [['맞음', 0], ['아님 −1', -1]], decided: false });
+    else intervals.push(iv);
+  }
+  if (end - ms[ms.length - 1].eTime > 0.6 * dur) miss(ms[ms.length - 1].eTime - 0.1, end);
+  for (const m of ms) spans.push(m.eTime - m.sTime);
+}
+function bump() {
+  const t = total();
+  if (Math.floor(t / 100) > S.lastHundred) { S.lastHundred = Math.floor(t / 100); if (navigator.vibrate) navigator.vibrate(t >= S.target ? [400, 150, 400, 150, 600] : [120, 80, 120]); }
+  if (t >= S.target && !S.notified) { S.notified = true; beep(); try { if (Notification.permission === 'granted') new Notification('읽기 카운터', { body: `${S.target}번 달성` }); } catch (e) {} }
+}
+function beep() { try { actx = actx || new AudioContext(); [0, .25, .5].forEach((d, i) => { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = 660 + i * 220; g.gain.value = .2; o.connect(g); g.connect(actx.destination); o.start(actx.currentTime + d); o.stop(actx.currentTime + d + .2); }); } catch (e) {} }
+
+// ---------- 시작/정지 ----------
+async function start() {
+  if (templates.length < 2) { setStatus('본보기를 둘 이상 녹음해 주세요', 'warn'); return; }
+  try { actx = actx || new AudioContext(); if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
+  try { await startAudio(); } catch (e) { setStatus('마이크를 못 켰습니다. 주소창 자물쇠에서 허용해 주세요', 'warn'); return; }
+  mode = 'session'; running = true; S.startedAt = Date.now(); utt = null;
+  $('startBtn').textContent = '일시정지'; $('startBtn').classList.remove('accent'); $('setup').style.display = 'none';
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+  timer = setInterval(render, 1000); setStatus('듣는 중', 'on'); render(); renderTpl(); save();
+}
+function pause() {
+  running = false; S.elapsed += Date.now() - S.startedAt; S.startedAt = null;
+  flushAll();
+  if (utt) closeUtt();
+  settlePending(Infinity);
+  if (audio && audio.ctx.state === 'running') audio.ctx.suspend();
+  if (wakeLock) { wakeLock.release(); wakeLock = null; }
+  clearInterval(timer);
+  $('startBtn').textContent = '이어서'; $('startBtn').classList.add('accent'); $('setup').style.display = '';
+  setStatus('일시정지 · 확인 구간 ' + flags.filter(f => !f.decided).length + '곳', ''); render(); renderTpl(); save();
+}
+$('startBtn').onclick = () => running ? pause() : start();
+$('plusBtn').onclick = () => { S.adjust++; bump(); render(); save(); };
+$('minusBtn').onclick = () => { S.adjust--; render(); save(); };
+document.addEventListener('visibilitychange', async () => { if (document.visibilityState === 'visible' && running && !wakeLock) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {} } });
+
+// ---------- 끝내고 확인 ----------
+$('finishBtn').onclick = () => {
+  if (running) pause();
+  const card = $('reviewCard'), list = $('flags');
+  $('flagCount').textContent = flags.filter(f => !f.decided).length;
+  card.style.display = 'block'; list.innerHTML = '';
+  if (!flags.length) list.innerHTML = '<div class="hint">확인할 구간이 없습니다.</div>';
+  flags.forEach((g, i) => {
+    const d = document.createElement('div'); d.className = 'flag' + (g.decided ? ' done' : '');
+    d.innerHTML = `<div class="t">${i + 1}. ${g.kind} · ${fmt(g.from * 1000)} ~ ${fmt(g.to * 1000)} (${(g.to - g.from).toFixed(1)}초)${g.decided ? ' · 반영 ' + (g.added >= 0 ? '+' : '') + g.added : ''}</div>
+      <div class="row"><button class="ghost sm" data-p>▶ 재생</button>${g.opts.map(([l, n]) => `<button class="sm" data-n="${n}">${l}</button>`).join('')}</div>`;
+    d.querySelector('[data-p]').onclick = () => play(Math.max(0, g.from - 0.3), g.to + 0.3);
+    d.querySelectorAll('[data-n]').forEach(b => b.onclick = () => {
+      const n = +b.dataset.n; if (g.decided) S.adjust -= g.added;
+      g.decided = true; g.added = n; S.adjust += n; bump(); render(); save(); $('finishBtn').click();
+    });
+    list.appendChild(d);
+  });
+  card.scrollIntoView({ behavior: 'smooth' });
+};
+$('wavBtn').onclick = () => { if (!audio) return; const a = document.createElement('a'); a.href = URL.createObjectURL(wavBlob(sliceAudio(0, recTime()))); a.download = `읽기 ${new Date().toISOString().slice(0, 10)}.wav`; a.click(); };
+let resetArmed = false;
+$('resetBtn').onclick = () => {
+  if (!resetArmed) { resetArmed = true; $('resetBtn').textContent = '정말 초기화'; setTimeout(() => { resetArmed = false; $('resetBtn').textContent = '초기화'; }, 3000); return; }
+  if (running) pause();
+  if (audio) { audio.blocks = []; audio.pendLen = 0; }
+  matches = []; flags = []; intervals = []; spans = []; pendingZero = []; lastMatch = null; utt = null; vIdx = 0; rebuild();
+  Object.assign(S, { count: 0, adjust: 0, elapsed: 0, lastHundred: 0, notified: false, startedAt: null });
+  $('reviewCard').style.display = 'none'; $('setup').style.display = ''; $('log').textContent = ''; $('matchInfo').textContent = ''; $('meterFill').style.width = '0';
+  resetArmed = false; $('resetBtn').textContent = '초기화'; setStatus('대기 중', ''); render(); renderTpl(); save();
+};
+
+if (!navigator.mediaDevices || !window.AudioWorkletNode) setStatus('이 브라우저에선 마이크 처리가 안 됩니다. 크롬으로 열어 주세요', 'warn');
+rebuild(); renderTpl(); render();
+})();
+</script>
+</body>
+</html>
