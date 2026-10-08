@@ -1,9 +1,9 @@
 {
  "name": "읽기 카운터",
  "short_name": "읽기 카운터",
- "id": "/read-counter/",
- "start_url": "/read-counter/",
- "scope": "/read-counter/",
+ "id": "/goal-reading/",
+ "start_url": "/goal-reading/",
+ "scope": "/goal-reading/",
  "display": "standalone",
  "background_color": "#15140f",
  "theme_color": "#b4531e",
